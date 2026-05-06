@@ -1,0 +1,244 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>SQL Server Monitoring Dashboard</title>
+    <link rel="stylesheet" href="/static/styles.css?v=16">
+    <style>
+        .loader-wrapper {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            z-index: 9999;
+            transition: opacity 0.5s, visibility 0.5s;
+        }
+        .loader-wrapper.hidden {
+            opacity: 0;
+            visibility: hidden;
+        }
+        .loader {
+            width: 80px;
+            height: 80px;
+            border: 8px solid rgba(255, 255, 255, 0.2);
+            border-top-color: white;
+            border-radius: 50%;
+            animation: spin 1s linear infinite;
+        }
+        .loader-text {
+            position: absolute;
+            color: white;
+            font-size: 18px;
+            font-weight: 600;
+            margin-top: 120px;
+            animation: pulse 1.5s ease-in-out infinite;
+        }
+    </style>
+</head>
+<body>
+    <div class="loader-wrapper" id="loader">
+        <div>
+            <div class="loader"></div>
+            <div class="loader-text">Loading Dashboard...</div>
+        </div>
+    </div>
+
+    <div class="container" style="opacity: 0;" id="mainContent">
+        <header>
+            <div>
+                <h1>🗄️ SQL Server Monitoring Dashboard</h1>
+                <p style="color: #666; font-size: 14px; margin-top: 5px;">Real-time Performance & Audit Analytics</p>
+            </div>
+            <div class="header-info">
+                <div class="server-selector">
+                    <label for="serverSelect" style="font-size: 13px; color: #666; margin-right: 8px;">Server:</label>
+                    <select id="serverSelect" onchange="onServerChange()">
+                        <option value="">Loading...</option>
+                    </select>
+                </div>
+                <span id="currentTime" style="font-weight: 500;"></span>
+                <span class="status-badge" id="statusBadge">● Connected</span>
+            </div>
+        </header>
+
+        <nav class="tabs">
+            <button class="tab-btn active" data-tab="overview">Overview</button>
+            <button class="tab-btn" data-tab="queries">Running Queries</button>
+            <button class="tab-btn" data-tab="long-running">Long Running</button>
+            <button class="tab-btn" data-tab="users">Users</button>
+            <button class="tab-btn" data-tab="tables">Tables</button>
+            <button class="tab-btn" data-tab="sessions">Kill Sessions</button>
+        </nav>
+
+        <!-- Overview Tab -->
+        <div id="overview" class="tab-content active">
+            <div class="stats-grid">
+                <div class="stat-card">
+                    <div class="stat-icon">⚡</div>
+                    <div class="stat-info">
+                        <h3 id="runningCount">0</h3>
+                        <p>Running Queries</p>
+                    </div>
+                </div>
+                <div class="stat-card">
+                    <div class="stat-icon">⏱️</div>
+                    <div class="stat-info">
+                        <h3 id="longRunningCount">0</h3>
+                        <p>Long Running</p>
+                    </div>
+                </div>
+                <div class="stat-card">
+                    <div class="stat-icon">👥</div>
+                    <div class="stat-info">
+                        <h3 id="activeUsersCount">0</h3>
+                        <p>Active Users</p>
+                    </div>
+                </div>
+                <div class="stat-card">
+                    <div class="stat-icon">🔥</div>
+                    <div class="stat-info">
+                        <h3 id="topCpuCount">0</h3>
+                        <p>High CPU Queries</p>
+                    </div>
+                </div>
+                <div class="stat-card cpu-card">
+                    <div class="stat-icon">💻</div>
+                    <div class="stat-info">
+                        <h3 id="cpuUtilization">0%</h3>
+                        <p>CPU Utilization</p>
+                    </div>
+                </div>
+            </div>
+
+            <div class="charts-grid">
+                <div class="card">
+                    <h2>Top CPU Consuming Queries</h2>
+                    <div id="topCpuQueries" class="query-list"></div>
+                </div>
+                <div class="card">
+                    <h2>Top I/O Consuming Queries</h2>
+                    <div id="topIoQueries" class="query-list"></div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Running Queries Tab -->
+        <div id="queries" class="tab-content">
+            <div class="card">
+                <div class="card-header">
+                    <h2>Running Queries</h2>
+                    <div class="filters">
+                        <input type="text" id="queryFilter" placeholder="Filter by database, user, or host...">
+                        <select id="queryStatusFilter" onchange="loadRunningQueries()">
+                            <option value="">All Status</option>
+                            <option value="running">Running</option>
+                            <option value="sleeping">Sleeping</option>
+                            <option value="suspended">Suspended</option>
+                            <option value="runnable">Runnable</option>
+                        </select>
+                        <button onclick="loadRunningQueries()" class="btn-refresh">🔄 Refresh</button>
+                    </div>
+                </div>
+                <div id="runningQueriesTable" class="table-container"></div>
+            </div>
+        </div>
+
+        <!-- Long Running Tab -->
+        <div id="long-running" class="tab-content">
+            <div class="card">
+                <div class="card-header">
+                    <h2>Long Running Queries (>5 minutes)</h2>
+                    <button onclick="loadLongRunningQueries()" class="btn-refresh">🔄 Refresh</button>
+                </div>
+                <div id="longRunningTable" class="table-container"></div>
+            </div>
+        </div>
+
+        <!-- Users Tab -->
+        <div id="users" class="tab-content">
+            <div class="card">
+                <div class="card-header">
+                    <h2>Active Users</h2>
+                    <div class="filters">
+                        <select id="statusFilter" onchange="loadActiveUsers(1)">
+                            <option value="">All Status</option>
+                            <option value="running">Running</option>
+                            <option value="sleeping">Sleeping</option>
+                            <option value="suspended">Suspended</option>
+                            <option value="runnable">Runnable</option>
+                        </select>
+                        <button onclick="loadActiveUsers(1)" class="btn-refresh">🔄 Refresh</button>
+                    </div>
+                </div>
+                <div id="activeUsersTable" class="table-container"></div>
+                <div class="pagination" id="usersPagination"></div>
+            </div>
+
+            <div class="card" style="margin-top: 20px;">
+                <h2>User Activity Details</h2>
+                <div class="user-selector">
+                    <label>Select User:</label>
+                    <select id="userSelect" onchange="loadUserDetails()">
+                        <option value="">-- Select a user --</option>
+                    </select>
+                </div>
+                <div id="userDetails"></div>
+            </div>
+        </div>
+
+        <!-- Tables Tab -->
+        <div id="tables" class="tab-content">
+            <div class="card">
+                <div class="card-header">
+                    <h2>Table Usage Statistics</h2>
+                    <button onclick="loadTableUsage(1)" class="btn-refresh">🔄 Refresh</button>
+                </div>
+                <div id="tableUsageTable" class="table-container"></div>
+                <div class="pagination" id="tableUsagePagination"></div>
+            </div>
+
+            <div class="card" style="margin-top: 20px;">
+                <div class="card-header">
+                    <h2>Unused Tables (Last 30 Days)</h2>
+                    <button onclick="loadUnusedTables(1)" class="btn-refresh">🔄 Refresh</button>
+                </div>
+                <div id="unusedTablesTable" class="table-container"></div>
+                <div class="pagination" id="unusedTablesPagination"></div>
+            </div>
+        </div>
+
+        <!-- Kill Sessions Tab -->
+        <div id="sessions" class="tab-content">
+            <div class="card">
+                <div class="card-header">
+                    <h2>⚠️ Terminate Sleeping/Suspended Sessions</h2>
+                    <button onclick="loadSleepingSessions()" class="btn-refresh">🔄 Refresh</button>
+                </div>
+                <p style="color: #666; font-size: 14px; margin: 15px 0; line-height: 1.6;">
+                    This tool identifies and terminates user sessions that have been in a <strong>sleeping or suspended state for more than 30 minutes</strong>. 
+                    These sessions consume server resources and may impact performance.
+                </p>
+                <div id="sleepingSessionsTable" class="table-container"></div>
+                <div class="pagination" id="sessionsPagination"></div>
+                <div id="sleepingSessionsActions" style="margin-top: 20px; text-align: center; display: none;">
+                    <button onclick="terminateSleepingSessions()" class="btn-terminate" style="background: #ef4444; color: white; padding: 14px 32px; border: none; border-radius: 8px; font-size: 15px; font-weight: 600; cursor: pointer; transition: all 0.3s;">
+                        ⚠️ Terminate All Sleeping Sessions
+                    </button>
+                    <p style="color: #ef4444; font-size: 13px; margin-top: 10px; font-weight: 500;">
+                        ⚠️ Warning: This action cannot be undone!
+                    </p>
+                </div>
+                <div id="terminateResult" style="margin-top: 20px;"></div>
+            </div>
+        </div>
+    </div>
+
+    <script src="/static/app.js?v=19"></script>
+</body>
+</html>

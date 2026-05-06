@@ -1,0 +1,9 @@
+fastapi==0.115.0
+uvicorn==0.32.0
+pyodbc==5.2.0
+pydantic==2.10.3
+pydantic-settings==2.6.1
+python-dotenv==1.0.1
+psutil==6.1.0
+wmi==1.5.1
+pywin32==311
